@@ -47,11 +47,10 @@ import { getFHEInstance } from "./utils/fheInstance";
 import { useAccount, useDisconnect } from "wagmi";
 
 
-
+//            mekele
 
 export default function App() {
   //const { account, connected, connect, disconnect } = useWeb3Auth();
-
 
 
 
