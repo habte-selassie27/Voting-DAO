@@ -7,5 +7,18 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@zama-fhe/relayer-sdk'],
      include: ['keccak']  // pre-bundle the CJS module
-  }
+  },
+
+  build: {
+    commonjsOptions: {
+      include: [/relayer-sdk/, /node_modules/],
+    }
+  },
+
 })
+
+ //  build: {
+  //   rollupOptions: {
+  //     external: ['@zama-fhe/relayer-sdk'],
+  //   },
+  // },

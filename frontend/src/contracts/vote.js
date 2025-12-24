@@ -1,9 +1,13 @@
 
-export const VOTE_ADDRESS = "0x3Eef27b4ed2277d6c87Cb2A5FB91E190CE163dd3";
+export const VOTE_ADDRESS = "0x5777C9AcEa42D2D554bC26D6d5320B88692d7320";
 
 export const VOTE_ABI = [
-
   
+    {
+      "inputs": [],
+      "name": "ZamaProtocolUnsupported",
+      "type": "error"
+    },
     {
       "anonymous": false,
       "inputs": [
@@ -12,15 +16,9 @@ export const VOTE_ABI = [
           "internalType": "uint256",
           "name": "proposalId",
           "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "bytes",
-          "name": "newTally",
-          "type": "bytes"
         }
       ],
-      "name": "TallyUpdated",
+      "name": "TallyDecryptRequested",
       "type": "event"
     },
     {
@@ -43,33 +41,8 @@ export const VOTE_ABI = [
       "type": "event"
     },
     {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "abstainCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "againstCount",
+      "inputs": [],
+      "name": "confidentialProtocolId",
       "outputs": [
         {
           "internalType": "uint256",
@@ -91,22 +64,9 @@ export const VOTE_ABI = [
       "name": "encryptedTallies",
       "outputs": [
         {
-          "internalType": "bytes",
+          "internalType": "euint8",
           "name": "",
-          "type": "bytes"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "fhePublicKey",
-      "outputs": [
-        {
-          "internalType": "bytes",
-          "name": "",
-          "type": "bytes"
+          "type": "bytes32"
         }
       ],
       "stateMutability": "view",
@@ -120,60 +80,12 @@ export const VOTE_ABI = [
           "type": "uint256"
         }
       ],
-      "name": "forCount",
+      "name": "isTallyFinalized",
       "outputs": [
         {
-          "internalType": "uint256",
+          "internalType": "bool",
           "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "proposalId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getEncryptedTally",
-      "outputs": [
-        {
-          "internalType": "bytes",
-          "name": "",
-          "type": "bytes"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "proposalId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getVoteCounts",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "against",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "forVotes",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "abstain",
-          "type": "uint256"
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -200,9 +112,9 @@ export const VOTE_ABI = [
           "type": "bool"
         },
         {
-          "internalType": "bytes",
-          "name": "ciphertext",
-          "type": "bytes"
+          "internalType": "euint8",
+          "name": "encryptedVote",
+          "type": "bytes32"
         }
       ],
       "stateMutability": "view",
@@ -211,12 +123,12 @@ export const VOTE_ABI = [
     {
       "inputs": [
         {
-          "internalType": "bytes",
-          "name": "newKey",
-          "type": "bytes"
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
         }
       ],
-      "name": "setFHEPublicKey",
+      "name": "requestTallyDecryption",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -229,13 +141,13 @@ export const VOTE_ABI = [
           "type": "uint256"
         },
         {
-          "internalType": "uint8",
-          "name": "voteOption",
-          "type": "uint8"
+          "internalType": "externalEuint8",
+          "name": "encryptedVote",
+          "type": "bytes32"
         },
         {
           "internalType": "bytes",
-          "name": "ciphertext",
+          "name": "inputProof",
           "type": "bytes"
         }
       ],
@@ -244,7 +156,7 @@ export const VOTE_ABI = [
       "stateMutability": "nonpayable",
       "type": "function"
     }
-  
+
+];
 
 
-]

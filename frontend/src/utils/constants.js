@@ -1,4 +1,5 @@
 import ConfidentialVotingABI from "../../../artifacts/contracts/ConfidentialVoting.sol/ConfidentialVoting.json";
+
 import ProposalManagerABI from "../../../artifacts/contracts/ProposalManager.sol/ProposalManager.json";
 
 // -------------------------------

@@ -1,6 +1,6 @@
 // src/contracts/proposalManager.js
 
-export const PROPOSAL_MANAGER_ADDRESS = "YOUR_DEPLOYED_SEPOLIA_ADDRESS_HERE";
+export const PROPOSAL_MANAGER_ADDRESS = "0x11D27f61a6c9A8D14DD7264e9b3E92bFC734E2ED";
 
 export const PROPOSAL_MANAGER_ABI = [
   {

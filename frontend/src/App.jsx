@@ -1,76 +1,40 @@
-// import { useState } from 'react'
-// import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
-// import './App.css'
+import React, { 
+  useEffect, useState
 
-// function App() {
-//   const [count, setCount] = useState(0)
-
-//   return (
-//     <>
-//       <div>
-//         <a href="https://vite.dev" target="_blank">
-//           <img src={viteLogo} className="logo" alt="Vite logo" />
-//         </a>
-//         <a href="https://react.dev" target="_blank">
-//           <img src={reactLogo} className="logo react" alt="React logo" />
-//         </a>
-//       </div>
-//       <h1>Vite + React</h1>
-//       <div className="card">
-//         <button onClick={() => setCount((count) => count + 1)}>
-//           count is {count}
-//         </button>
-//         <p>
-//           Edit <code>src/App.jsx</code> and save to test HMR
-//         </p>
-//       </div>
-//       <p className="read-the-docs">
-//         Click on the Vite and React logos to learn more
-//       </p>
-//     </>
-//   )
-// }
-
-// export default App
-import React, { useEffect, useState } from "react";
+ } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/Home.jsx";
 import Vote from "./pages/Vote.jsx";
 import Results from "./pages/Results.jsx";
 import CreateProposal from "./pages/CreateProposal.jsx";
-
-
-import { getFHEInstance } from "./utils/fheInstance";
-
-
+import { getFheInstance } from './utils/fheInstance';
 import { useAccount, useDisconnect } from "wagmi";
 
-
-//            mekele
 
 export default function App() {
   //const { account, connected, connect, disconnect } = useWeb3Auth();
 
-
-
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-
-
+const { address, isConnected } = useAccount();
+const { disconnect } = useDisconnect();
 const [sdkReady, setSdkReady] = useState(false);
 
-useEffect(()=> {
+if (!window.ethereum) {
+  throw new Error("Ethereum provider not found");
+}
+
+useEffect(() => {
   const initFHE = async () => {
-      try {
-        await getFHEInstance();
-        setSdkReady(true);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    initFHE();
-}, [])
+    try {
+      await getFheInstance(); // safe now
+      setSdkReady(true);
+    } catch (err) {
+      console.error("Failed to initialize FHE SDK:", err);
+      //console.error('Failed to load FHE SDK:', err);
+    }
+  };
+  initFHE();
+}, []);
+
 
  if (!sdkReady) {
     return <div className="min-h-screen flex items-center justify-center text-white">Loading FHE SDK...</div>;

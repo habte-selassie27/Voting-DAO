@@ -1,6 +1,6 @@
 // src/contracts/dao.js
 
-export const DAO_ADDRESS = "0x4f5f08DBDF27505308D7d5c30f34c9fA97257E78";
+export const DAO_ADDRESS = "0x11D27f61a6c9A8D14DD7264e9b3E92bFC734E2ED";
 
 export const DAO_ABI = [
   {

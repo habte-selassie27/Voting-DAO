@@ -1,227 +1,281 @@
-// eslint-disable-next-line no-unused-vars
-import { hexToBytes, padHex } from "viem";
-
-/* eslint-disable no-unused-vars */
+/* eslint-disable no-undef */
 import { useState, useEffect } from "react";
-import { useProposalsList } from "../hooks/useProposalsList.js";
-import { DAO_ABI, DAO_ADDRESS } from "../contracts/dao.js";
 import { useAccount } from "wagmi";
-import { useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useReadContracts,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+
+
+  import { useWalletClient } from "wagmi";
+//import { publicDecrypt } from "@zama-fhe/relayer-sdk";
+import { useProposalsList } from "../hooks/useProposalsList.js";
 import { VOTE_ABI, VOTE_ADDRESS } from "../contracts/vote.js";
-import { useReadContract } from "wagmi";
-
-import { getInstance } from "../utils/fhevm-v09"; // or wherever your init is
-
-
+import { getFheInstance } from "../utils/fheInstance.js";
 
 export default function Vote() {
-  const { isConnected, address } = useAccount();
+
+const {  address } = useAccount();
+
+
+   const { data: walletClient } = useWalletClient();
+
   const { data: proposals } = useProposalsList();
 
-  const [selectedVotes, setSelectedVotes] = useState({}); // proposalId → voteValue
+  const [selectedVotes, setSelectedVotes] = useState({});
   const [loadingProposal, setLoadingProposal] = useState(null);
-  const [lastTxHash, setLastTxHash] = useState(null); // track last tx hash
-  const [waitingTx, setWaitingTx] = useState(null); // track tx currently waiting
-  const [confirmedTx, setConfirmedTx] = useState(null); // track confirmed tx
-  const [error, setError] = useState(null);
-
-  const [proposalTxs, setProposalTxs] = useState({}); 
-// structure: { [proposalId]: { waitingTx: string, confirmedTx: string | null, error: Error | null } }
-
+  const [proposalTxs, setProposalTxs] = useState({});
+  const [fheInstance, setFheInstance] = useState(null);
+  const [clearTallies, setClearTallies] = useState({});
 
   const { writeContractAsync } = useWriteContract();
 
-  // const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
-  //   hash: lastTxHash,
-  //   watch: true,
-  // });
+  // Init FHE instance once
+  useEffect(() => {
+    getFheInstance().then(setFheInstance);
+  }, []);
 
-  const talliesContracts = proposals?.map(p => ({
-    address: VOTE_ADDRESS,
-    abi: VOTE_ABI,
-    functionName: "getEncryptedTally",
-    args: [p.id],
-  })) || [];
+  /* ---------------------------------------------
+     Read encrypted tallies + finalized flag
+  ---------------------------------------------- */
+  const contracts = proposals
+    ? proposals.flatMap((p) => [
+        {
+          address: VOTE_ADDRESS,
+          abi: VOTE_ABI,
+          functionName: "encryptedTallies",
+          args: [p.id],
+        },
+        {
+          address: VOTE_ADDRESS,
+          abi: VOTE_ABI,
+          functionName: "isTallyFinalized",
+          args: [p.id],
+        },
+      ])
+    : [];
 
-  const { data: tallies } = useReadContracts({
-    contracts: talliesContracts,
-    watch: true,
-  });
+  const { data } = useReadContracts({ contracts, watch: true });
 
-  const handleVoteSelect = (proposalId, value) => {
-    setSelectedVotes(prev => ({ ...prev, [proposalId]: value }));
+  const getEncryptedTally = (i) => data?.[i * 2]?.result;
+  const getIsFinalized = (i) => data?.[i * 2 + 1]?.result;
+
+  /* ---------------------------------------------
+     Submit encrypted vote
+  ---------------------------------------------- */
+  const handleSubmit = async (proposalId) => {
+    if (!fheInstance) return alert("FHE not ready");
+    const voteOption = selectedVotes[proposalId];
+    if (voteOption === undefined) return alert("Select a vote first");
+
+    setLoadingProposal(proposalId);
+
+    try {
+      const input = fheInstance.createEncryptedInput(
+        VOTE_ADDRESS,
+        address
+      );
+      input.add8(voteOption);
+      const encrypted = await input.encrypt();
+
+      console.log("WHY ALWAYS ME", encrypted);
+
+      // const handleHex = `0x${Array.from(encrypted.handles[0])
+      //   .map((b) => b.toString(16).padStart(2, "0"))
+      //   .join("")}`;
+
+      // const proofHex = `0x${Array.from(encrypted.inputProof)
+      //   .map((b) => b.toString(16).padStart(2, "0"))
+      //   .join("")}`;
+
+      const txHash = await writeContractAsync({
+        address: VOTE_ADDRESS,
+        abi: VOTE_ABI,
+        functionName: "submitEncryptedVote",
+        args: [BigInt(proposalId), encrypted.handles[0], encrypted.inputProof],
+        gas: 5_000_000n,
+      });
+
+      setProposalTxs((p) => ({
+        ...p,
+        [proposalId]: { waitingTx: txHash },
+      }));
+    } catch (err) {
+      alert(err.message || "Vote failed");
+    }
+
+    setLoadingProposal(null);
   };
-
-  
 
 
 //   const handleSubmit = async (proposalId) => {
+//   if (!fheInstance) return alert("FHE not ready");
 //   const voteOption = selectedVotes[proposalId];
-//   if (voteOption === undefined) return alert("Select a vote option first!");
+//   if (voteOption === undefined) return alert("Select a vote");
 
 //   setLoadingProposal(proposalId);
-//   setProposalTxs((prev) => ({ 
-//     ...prev, 
-//     [proposalId]: { waitingTx: null, confirmedTx: null, error: null } 
-//   }));
 
 //   try {
-   
-//     let voteHash = await hashVote(voteOption);
 
-//        // ensure it is exactly 32 bytes
-//       voteHash = voteHash.slice(0, 66); // keep 0x + 64 chars
+//     const signerAddress = walletClient?.account?.address;
 
-//       const voteHashBytes32 = padHex(voteHash, { size: 32 });
+//     if (!signerAddress) {
+//        throw new Error("Wallet not ready");
+//     }
+
+//     console.log("Encrypting for:");
+//     console.log("Contract:", VOTE_ADDRESS);
+//     console.log("User:", signerAddress);
+//     console.log("Chain:", fheInstance.chainId);
+//     console.log("Submitting proposalId:", proposalId, typeof proposalId);
 
 
-//     if (!writeContractAsync) throw new Error("Wallet not ready");
+    
+
+//     const input = fheInstance.createEncryptedInput(
+//        VOTE_ADDRESS,
+//        signerAddress
+//     );
+
+//     input.add8(voteOption);
+//     const encrypted = await input.encrypt();
+
+//     // const handleHex = `0x${Array.from(encrypted.handles[0])
+//     //   .map(b => b.toString(16).padStart(2, "0"))
+//     //   .join("")}`;
+
+//     // const proofHex = `0x${Array.from(encrypted.inputProof)
+//     //   .map(b => b.toString(16).padStart(2, "0"))
+//     //   .join("")}`;
 
 //     const txHash = await writeContractAsync({
 //       address: VOTE_ADDRESS,
 //       abi: VOTE_ABI,
 //       functionName: "submitEncryptedVote",
-//       args: [proposalId, voteOption, voteHashBytes32],
-//       gas: 3_000_000,
+//       args: [BigInt(proposalId), encrypted.handles[0], encrypted.inputProof],
+//       gas: 5_000_000n,
 //     });
 
-//     setProposalTxs((prev) => ({
+//     // ✅ store tx hash
+//     setProposalTxs(prev => ({
 //       ...prev,
-//       [proposalId]: { ...prev[proposalId], waitingTx: txHash }
+//       [proposalId]: txHash,
 //     }));
-
-//     alert(`Transaction sent! Hash: ${txHash}`);
-
-//     // const voteCounts = await contract.read.getVoteCounts([proposalId]);
-//     // console.log(voteCounts);
-
-//     console.log("Submitting vote", { proposalId, voteOption, voteHashBytes32 });
-
-
-//     console.log("Submitting vote for proposal:", proposalId);
-
 //   } catch (err) {
-//     console.error("Error submitting vote:", err);
-//     setProposalTxs((prev) => ({
-//       ...prev,
-//       [proposalId]: { ...prev[proposalId], error: err }
-//     }));
-//     alert("Error submitting vote: " + (err?.shortMessage || err?.message || err));
+//     alert(err.message || "Vote failed");
 //   }
 
 //   setLoadingProposal(null);
 // };
 
 
-const handleSubmit = async (proposalId) => {
-  const voteOption = selectedVotes[proposalId];
-  if (voteOption === undefined) return alert("Select a vote option first!");
-
-  setLoadingProposal(proposalId);
-
-  try {
-    // Get fhEVM instance
-    const instance = await getInstance();
-    
-    // Create encrypted input
-    const input = instance.createEncryptedInput(VOTE_ADDRESS, address);
-    input.add8(voteOption); // encrypt the vote (0, 1, or 2)
-    const encryptedData = await input.encrypt();
-
-    // Submit to contract
-    const txHash = await writeContractAsync({
+  /* ---------------------------------------------
+     Finalize + decrypt tally
+  ---------------------------------------------- */
+  const handleReveal = async (proposalId, encryptedTally) => {
+    // 1️⃣ mark public on-chain
+    await writeContractAsync({
       address: VOTE_ADDRESS,
       abi: VOTE_ABI,
-      functionName: "submitEncryptedVote",
-      args: [
-        proposalId,
-        encryptedData.handles[0],   // encrypted vote handle
-        encryptedData.inputProof    // KMS proof
-      ],
-      gas: 3_000_000,
+      functionName: "requestTallyDecryption",
+      args: [BigInt(proposalId)],
     });
 
-    alert(`Vote encrypted & submitted! Hash: ${txHash}`);
+    // 2️⃣ decrypt off-chain
+    const clear = await publicDecrypt(
+      encryptedTally,
+      VOTE_ADDRESS
+    );
 
-  } catch (err) {
-    console.error("Error:", err);
-    alert("Error: " + (err?.shortMessage || err?.message));
-  }
+    setClearTallies((p) => ({ ...p, [proposalId]: clear }));
+  };
 
-  setLoadingProposal(null);
-};
-
-  if (!proposals) return <p className="text-gray-300">Loading proposals...</p>;
+  if (!proposals) return <p>Loading proposals…</p>;
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h1 className="text-4xl font-bold text-blue-400 mb-4">Active Proposals</h1>
-
-      {proposals.length === 0 && (
-        <p className="text-gray-400 text-lg">No proposals have been created yet.</p>
-      )}
+      <h1 className="text-4xl font-bold text-blue-400">
+        Active Proposals
+      </h1>
 
       {proposals.map((p, i) => {
-        const tally = tallies ? tallies[i] : null;
+        const encryptedTally = getEncryptedTally(i);
+        const finalized = getIsFinalized(i);
+        const clear = clearTallies[p.id];
 
         return (
-          <div
-            key={p.id}
-            className="p-5 bg-gray-900 rounded-xl border border-gray-700 shadow-lg"
-          >
-            <h2 className="text-2xl font-semibold text-blue-300">#{p.id} — {p.title}</h2>
-            <p className="text-gray-300 mb-4">{p.description}</p>
+          <div key={p.id} className="p-5 bg-gray-900 rounded-xl">
+            <h2 className="text-xl text-blue-300">
+              #{p.id} — {p.title}
+            </h2>
 
-            <div className="flex gap-3 mb-3">
-              <button
-                onClick={() => handleVoteSelect(p.id, 0)}
-                className={`px-4 py-2 rounded ${selectedVotes[p.id] === 0 ? "bg-red-600" : "bg-gray-700"}`}
-              >
-                Against (0)
-              </button>
-              <button
-                onClick={() => handleVoteSelect(p.id, 1)}
-                className={`px-4 py-2 rounded ${selectedVotes[p.id] === 1 ? "bg-green-600" : "bg-gray-700"}`}
-              >
-                For (1)
-              </button>
-              <button
-                onClick={() => handleVoteSelect(p.id, 2)}
-                className={`px-4 py-2 rounded ${selectedVotes[p.id] === 2 ? "bg-yellow-600" : "bg-gray-700"}`}
-              >
-                Abstain (2)
-              </button>
-            </div>
+            {!finalized && (
+              <>
+                <div className="flex gap-3 my-3">
+                  {[0, 1, 2].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() =>
+                        setSelectedVotes((s) => ({
+                          ...s,
+                          [p.id]: v,
+                        }))
+                      }
+                      className="bg-gray-700 px-3 py-2 rounded"
+                    >
+                      {v === 0
+                        ? "Against"
+                        : v === 1
+                        ? "For"
+                        : "Abstain"}
+                    </button>
+                  ))}
+                </div>
 
-            <button
-              onClick={() => handleSubmit(p.id)}
-              className="bg-blue-600 px-4 py-2 rounded disabled:bg-gray-600"
-              disabled={loadingProposal === p.id}
-            >
-              {loadingProposal === p.id ? "Encrypting vote…" : "Encrypt & Submit Vote"}
-            </button>
 
-<ProposalTxWatcher
-  proposalId={p.id}
-  txHash={proposalTxs[p.id]?.waitingTx}
-  onConfirmed={(proposalId, txHash) => {
-    setProposalTxs((prev) => ({
-      ...prev,
-      [proposalId]: {
-        waitingTx: null,
-        confirmedTx: txHash,
-      },
-    }));
-    setSelectedVotes((prev) => ({ ...prev, [proposalId]: undefined }));
-  }}
-/>
+<button
+      disabled={!walletClient || loadingProposal === p.id}
+      onClick={() => handleSubmit(p.id)}
+      className="bg-blue-600 px-4 py-2 rounded disabled:bg-gray-600"
+    >
+      {loadingProposal === p.id
+        ? "Encrypting & submitting…"
+        : "Encrypt & Vote"}
+    </button>
 
-            <div className="mt-4 p-3 bg-gray-800 rounded border border-gray-700">
-              <h3 className="text-lg font-semibold text-blue-300">Encrypted Tally</h3>
-              <pre className="text-gray-400 break-words">
-                {tally ? JSON.stringify(tally.data) : "No votes yet"}
+{/* ✅ tx status */}
+<TxStatus txHash={proposalTxs[p.id]} />
+
+
+              </>
+            )}
+
+            <div className="mt-4">
+              <p className="text-sm text-gray-400">
+                Encrypted tally:
+              </p>
+              <pre className="text-xs break-words">
+                {encryptedTally || "—"}
               </pre>
             </div>
+
+            {finalized && clear !== undefined && (
+              <p className="mt-3 text-green-400">
+                ✅ Final tally: {clear}
+              </p>
+            )}
+
+            {!finalized && encryptedTally && (
+              <button
+                className="mt-3 bg-purple-600 px-3 py-2 rounded"
+                onClick={() =>
+                  handleReveal(p.id, encryptedTally)
+                }
+              >
+                Finalize & Reveal
+              </button>
+            )}
           </div>
         );
       })}
@@ -230,39 +284,23 @@ const handleSubmit = async (proposalId) => {
 }
 
 
-
-function ProposalTxWatcher({ proposalId, txHash, onConfirmed }) {
-  const { isLoading: confirming, isSuccess, error } =
-    useWaitForTransactionReceipt({
-      hash: txHash,
-      watch: true,
-    });
-
-  useEffect(() => {
-    if (isSuccess && txHash) {
-      onConfirmed(proposalId, txHash);
-    }
-  }, [isSuccess, txHash, proposalId, onConfirmed]);
+function TxStatus({ txHash }) {
+  const { isLoading, isSuccess, isError, error } =
+    useWaitForTransactionReceipt({ hash: txHash });
 
   if (!txHash) return null;
 
-  return (
-    <>
-      {confirming && (
-        <p className="text-blue-400 mt-2">Waiting for confirmation…</p>
-      )}
-      {isSuccess && (
-        <p className="text-green-400 mt-2">Vote confirmed!</p>
-      )}
-      {error && (
-        <p className="text-red-400 mt-2">
-          Error: {error.message || "Transaction failed"}
-        </p>
-      )}
-    </>
-  );
+  if (isLoading) {
+    return <p className="text-blue-400">⏳ Waiting for confirmation…</p>;
+  }
+
+  if (isSuccess) {
+    return <p className="text-green-400">✅ Vote confirmed</p>;
+  }
+
+  if (isError) {
+    return <p className="text-red-400">❌ {error?.message}</p>;
+  }
+
+  return null;
 }
-
-
-
-

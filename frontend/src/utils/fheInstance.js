@@ -1,108 +1,168 @@
-// // src/utils/fheInstance.js
-// import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/web';
 
-// let instance = null;
+let fheInstance = null;
 
-// export async function getFHEInstance() {
-//   if (instance) return instance;
+if (!window.ethereum) {
+  throw new Error("Ethereum provider not found");
+}
 
-//   try {
-//     // 1. Load the WASM
-//     await initSDK();
+export async function getFheInstance() {
+  if (fheInstance) return fheInstance;
 
-//     // 2. Create the FHE instance
-//     instance = await createInstance({
-//       ...SepoliaConfig,
-//       network: window.ethereum,
-//     });
+  // Dynamically load the UMD SDK if it doesn't exist
+  if (!window.relayerSDK) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src =
+        "https://cdn.zama.org/relayer-sdk-js/0.3.0-8/relayer-sdk-js.umd.cjs";
+      s.type = "text/javascript";
+      s.onload = () => {
+        // sometimes relayerSDK takes a tick to attach, wait a tiny bit
+        setTimeout(() => {
+          if (!window.relayerSDK) reject("relayerSDK not found after load");
+          else resolve();
+        }, 50);
+      };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
 
-//     console.log('FHE SDK initialized:', instance);
-//     return instance;
-//   } catch (err) {
-//     console.error('Error initializing FHE SDK:', err);
-//     throw err;
-//   }
-// }
-// src/utils/fheInstance.js
+  // Now window.relayerSDK must exist
+  const { initSDK, createInstance, SepoliaConfig } = window.relayerSDK;
 
-import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk';
-import { ethers } from 'ethers';
-import ConfidentialVotingArtifact from '../../../artifacts/contracts/ConfidentialVoting.sol/ConfidentialVoting.json';
-import TallyDecryptionArtifact from '../../../artifacts/contracts/TallyDecryption.sol/TallyDecryption.json';
+  if (!initSDK || !createInstance) {
+    throw new Error("Relayer SDK failed to load correctly");
+  }
 
-// FHE instance singleton
-let instance = null;
+  // Initialize the SDK
+  await initSDK();
+
+  // Create instance
+  fheInstance = await createInstance({
+    ...SepoliaConfig,
+    // or your manual addresses & relayerUrl
+    chainId: 11155111,
+    relayerUrl: "https://relayer.testnet.zama.org",
+    // ...other contract addresses
+    network: window.ethereum,
+  });
+
+  return fheInstance;
+}
+
+
 
 /**
- * Initialize and return the FHE instance
+ * Step 2 — Publicly decrypt encrypted tally via relayer
+ *
+ * @param encryptedTally bytes32 handle from ConfidentialVoting.encryptedTallies
+ * @returns { clearTally, proof }
  */
-export async function getFHEInstance() {
-  if (instance) return instance;
+export async function publicDecryptTally(encryptedTally) {
+  const fhe = getFheInstance();
+  if (!fhe) {
+    throw new Error('FHE instance not initialized');
+  }
+
+  if (
+    typeof encryptedTally !== 'string' ||
+    !encryptedTally.startsWith('0x') ||
+    encryptedTally.length !== 66
+  ) {
+    throw new Error('Invalid encrypted tally handle');
+  }
 
   try {
-    // 1️⃣ Load the TFHE WASM
-    await initSDK();
+    /**
+     * publicDecrypt returns:
+     * {
+     *   values: { [handle]: number },
+     *   proof: bytes
+     * }
+     */
+    const result = await fhe.publicDecrypt([encryptedTally]);
 
-    // 2️⃣ Create FHE instance with Sepolia config + window.ethereum
-    instance = await createInstance({
-      ...SepoliaConfig,
-      network: window.ethereum,
+    const clearTally = Number(result.values[encryptedTally]);
+    const proof = result.proof;
+
+    console.log('[FHE] public decrypt success', {
+      encryptedTally,
+      clearTally,
     });
 
-    console.log('FHE SDK initialized:', instance);
-    return instance;
-  } catch (err) {
-    console.error('Error initializing FHE SDK:', err);
-    throw err;
+    return { clearTally, proof };
+  } catch (error) {
+    const msg = String(error?.message || '');
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      throw new Error('Zama relayer temporarily unavailable');
+    }
+    throw error;
   }
 }
 
 /**
- * Off-chain decryption workflow for a proposal's tally
- * @param {string} votingContractAddress - Deployed ConfidentialVoting contract
- * @param {string} decryptionContractAddress - Deployed TallyDecryption contract
- * @param {number} proposalId - ID of the proposal to decrypt
+ * Step 3 — Finalize tally on-chain
+ *
+ * Calls TallyDecryption.finalizeTally(...)
  */
-export async function decryptTally(votingContractAddress, decryptionContractAddress, proposalId) {
-  if (!instance) {
-    instance = await getFHEInstance(); // Ensure FHE instance is initialized
+export async function finalizeTallyOnChain({
+  tallyDecryptionContract,
+  proposalId,
+  clearTally,
+  proof,
+  encryptedTally,
+}) {
+  if (!tallyDecryptionContract) {
+    throw new Error('TallyDecryption contract instance required');
   }
 
-  // 1️⃣ Connect to Ethereum provider
-  const provider = new ethers.providers.Web3Provider(window.ethereum);
-  const signer = provider.getSigner();
-
-  // 2️⃣ Contract instances
-  const votingContract = new ethers.Contract(
-    votingContractAddress,
-    ConfidentialVotingArtifact.abi,
-    signer
-  );
-
-  const decryptionContract = new ethers.Contract(
-    decryptionContractAddress,
-    TallyDecryptionArtifact.abi,
-    signer
-  );
-
-  // 3️⃣ Get the encrypted tally from the voting contract
-  const encryptedTallies = [await votingContract.encryptedTallies(proposalId)];
-
-  // 4️⃣ Perform off-chain public decryption using FHE instance
-  const results = await instance.publicDecrypt(encryptedTallies);
-  const clearTally = results.clearValues[encryptedTallies[0]]; // decrypted number
-  const decryptionProof = results.decryptionProof; // zero-knowledge proof for on-chain verification
-
-  // 5️⃣ Submit the decrypted tally + proof on-chain
-  const tx = await decryptionContract.finalizeTally(
+  const tx = await tallyDecryptionContract.finalizeTally(
     proposalId,
-    Number(clearTally),
-    decryptionProof,
-    encryptedTallies[0]
+    clearTally,
+    proof,
+    encryptedTally
   );
 
   await tx.wait();
 
-  console.log('Tally decrypted and finalized:', clearTally.toString());
+  console.log('[DAO] Tally finalized on-chain', {
+    proposalId: String(proposalId),
+    clearTally,
+  });
+
   return clearTally;
+}
+
+/**
+ * Full DAO flow helper:
+ * 1. Read encrypted tally
+ * 2. Public decrypt via relayer
+ * 3. Finalize on-chain
+ */
+export async function decryptAndFinalizeProposal({
+  votingContract,
+  tallyDecryptionContract,
+  proposalId,
+}) {
+  // Step 1: read encrypted tally
+  const encryptedTally =
+    await votingContract.encryptedTallies(proposalId);
+
+  console.log('[DAO] encrypted tally', {
+    proposalId: String(proposalId),
+    encryptedTally,
+  });
+
+  // Step 2: public decrypt
+  const { clearTally, proof } =
+    await publicDecryptTally(encryptedTally);
+
+  // Step 3: finalize on-chain
+  return finalizeTallyOnChain({
+    tallyDecryptionContract,
+    proposalId,
+    clearTally,
+    proof,
+    encryptedTally,
+  });
 }
