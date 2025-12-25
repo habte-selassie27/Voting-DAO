@@ -8,8 +8,8 @@ import {
 } from "wagmi";
 
 
-  import { useWalletClient } from "wagmi";
-//import { publicDecrypt } from "@zama-fhe/relayer-sdk";
+import { useWalletClient } from "wagmi";
+//import { publicDecrypt } from "@zama-fhe/relayer-sdk/web";
 import { useProposalsList } from "../hooks/useProposalsList.js";
 import { VOTE_ABI, VOTE_ADDRESS } from "../contracts/vote.js";
 import { getFheInstance } from "../utils/fheInstance.js";
@@ -81,25 +81,32 @@ const {  address } = useAccount();
 
       console.log("WHY ALWAYS ME", encrypted);
 
-      // const handleHex = `0x${Array.from(encrypted.handles[0])
-      //   .map((b) => b.toString(16).padStart(2, "0"))
-      //   .join("")}`;
+      const handleHex = `0x${Array.from(encrypted.handles[0])
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")}`;
 
-      // const proofHex = `0x${Array.from(encrypted.inputProof)
-      //   .map((b) => b.toString(16).padStart(2, "0"))
-      //   .join("")}`;
+      const proofHex = `0x${Array.from(encrypted.inputProof)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")}`;
 
       const txHash = await writeContractAsync({
         address: VOTE_ADDRESS,
         abi: VOTE_ABI,
         functionName: "submitEncryptedVote",
-        args: [BigInt(proposalId), encrypted.handles[0], encrypted.inputProof],
+        args: [
+          BigInt(proposalId), 
+          handleHex, 
+          proofHex
+        ],
         gas: 5_000_000n,
       });
 
+      console.log("TX HASH:",txHash);
+
       setProposalTxs((p) => ({
         ...p,
-        [proposalId]: { waitingTx: txHash },
+        //[proposalId]: { waitingTx: txHash },
+        [proposalId]: txHash,
       }));
     } catch (err) {
       alert(err.message || "Vote failed");
@@ -183,7 +190,7 @@ const {  address } = useAccount();
     });
 
     // 2️⃣ decrypt off-chain
-    const clear = await publicDecrypt(
+    const clear = await fheInstance.publicDecrypt(
       encryptedTally,
       VOTE_ADDRESS
     );
@@ -210,7 +217,7 @@ const {  address } = useAccount();
               #{p.id} — {p.title}
             </h2>
 
-            {!finalized && (
+            {!finalized && !clear && (
               <>
                 <div className="flex gap-3 my-3">
                   {[0, 1, 2].map((v) => (
@@ -285,10 +292,15 @@ const {  address } = useAccount();
 
 
 function TxStatus({ txHash }) {
-  const { isLoading, isSuccess, isError, error } =
-    useWaitForTransactionReceipt({ hash: txHash });
+  const enabled = Boolean(txHash);
 
-  if (!txHash) return null;
+  const { isLoading, isSuccess, isError, error } =
+    useWaitForTransactionReceipt({
+       hash: txHash,
+       enabled // This is Critical 
+    });
+
+  if (!enabled) return null;
 
   if (isLoading) {
     return <p className="text-blue-400">⏳ Waiting for confirmation…</p>;

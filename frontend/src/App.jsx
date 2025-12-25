@@ -9,6 +9,9 @@ import Results from "./pages/Results.jsx";
 import CreateProposal from "./pages/CreateProposal.jsx";
 import { getFheInstance } from './utils/fheInstance';
 import { useAccount, useDisconnect } from "wagmi";
+import VotingPlatform from "./pages/DashBoard.jsx";
+import { VotingStats } from "./pages/DashBoard2.jsx";
+import { Toaster } from "sonner";
 
 
 export default function App() {
@@ -41,7 +44,8 @@ useEffect(() => {
   }
 
   return (
-   
+    <>
+      <Toaster richColors position="top-right" />
       <div className="min-h-screen bg-gray-900 text-gray-100">
         {/* NAVBAR */}
         <nav className="border-b border-gray-800 p-4 flex justify-between items-center">
@@ -51,6 +55,9 @@ useEffect(() => {
             <Link className="hover:text-blue-400" to="/">Home</Link>
             <Link className="hover:text-blue-400" to="/vote">Vote</Link>
             <Link className="hover:text-blue-400" to="/results">Results</Link>
+            <Link className="hover:text-blue-400" to="/dashboard">Dashboard</Link>
+            <Link className="hover:text-blue-400" to="/dashboard2">Dashboard2</Link>
+
             <Link className="hover:text-blue-400" to="/create">Create Proposal</Link>
 {isConnected && (
   <span className="bg-green-600 text-white px-3 py-1 rounded">
@@ -84,15 +91,24 @@ useEffect(() => {
         </nav>
 
         {/* ROUTES */}
-        <div className="p-6">
+        <div 
+           //className="p-6" 
+           className="bg-blue-50/50 py-16 px-6">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/vote" element={<Vote />} />
             <Route path="/results" element={<Results />} />
             <Route path="/create" element={<CreateProposal />} />
+            <Route path="/dashboard" element={<VotingPlatform />}/>
+            
+             {/* Your VotingStats component here */}
+            <Route path="/dashboard2" element={<VotingStats />}/>
+
+            {/* <Route path="/dashboard2" element={<VotingStats />}/> */}
           </Routes>
         </div>
       </div>
+      </>
     
   );
 }

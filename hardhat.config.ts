@@ -2,6 +2,8 @@ import "dotenv/config";
 import "@nomicfoundation/hardhat-ethers";
 import { HardhatUserConfig } from "hardhat/types";
 import "hardhat-deploy";
+import "@typechain/hardhat";
+
 //import "@nomicfoundation/hardhat-toolbox";
 
 //import path from "path";
